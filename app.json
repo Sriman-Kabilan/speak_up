@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "SpeakUp",
+    "slug": "speakup-native",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.speakup.native",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "backgroundColor": "#2196F3"
+      }
+    },
+    "web": {}
+  }
+}
