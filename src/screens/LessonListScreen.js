@@ -2,11 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { View, ScrollView, StyleSheet, ActivityIndicator, Text } from 'react-native';
 import { subscribeToLessons } from '../services/lessonService';
 import { getUserAttempts } from '../services/attemptService';
+import { getCurrentUser } from '../services/authService';
+import { isLessonFullyCompleted } from '../services/lessonCompletionService';
 import LessonPathCard from '../components/LessonPathCard';
 
 export default function LessonsScreen({ navigation }) {
   const [lessons, setLessons] = useState([]);
   const [completedLessons, setCompletedLessons] = useState([]);
+  const [fullyCompletedLessons, setFullyCompletedLessons] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const isAdmin = true; // Set to true for admin/developer access
@@ -22,9 +25,22 @@ export default function LessonsScreen({ navigation }) {
           const sorted = data.sort((a, b) => (a.order || 0) - (b.order || 0));
           setLessons(sorted);
           
-          const attempts = await getUserAttempts('user_001');
+          const user = getCurrentUser();
+          const userId = user ? user.uid : 'user_001';
+          const attempts = await getUserAttempts(userId);
           const completed = [...new Set(attempts.map(a => a.lesson_id))];
           setCompletedLessons(completed);
+          
+          // Check which lessons are fully completed
+          const fullyCompleted = [];
+          for (const lesson of sorted) {
+            const isFullyDone = await isLessonFullyCompleted(userId, lesson.lesson_id);
+            if (isFullyDone) {
+              fullyCompleted.push(lesson.lesson_id);
+            }
+          }
+          setFullyCompletedLessons(fullyCompleted);
+          
           setLoading(false);
         },
         (err) => {
@@ -47,14 +63,14 @@ export default function LessonsScreen({ navigation }) {
 
   if (loading) {
     return (
-      <View style={[styles.container, styles.center]}>
+      <View style={styles.center}>
         <ActivityIndicator size="large" color="#2196F3" />
       </View>
     );
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView contentContainerStyle={styles.content}>
       <View style={styles.header}>
         <Text style={styles.headerEmoji}>🎯</Text>
         <Text style={styles.headerTitle}>Your Learning Journey</Text>
@@ -73,7 +89,7 @@ export default function LessonsScreen({ navigation }) {
             lesson={lesson}
             index={index}
             isUnlocked={isLessonUnlocked(lesson, index)}
-            isCompleted={completedLessons.includes(lesson.lesson_id)}
+            isCompleted={fullyCompletedLessons.includes(lesson.lesson_id)}
             onPress={() => {
               if (isLessonUnlocked(lesson, index)) {
                 navigation.navigate('Practice', { lesson });
@@ -91,15 +107,14 @@ export default function LessonsScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
   center: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#f5f5f5',
   },
   content: {
+    backgroundColor: '#f5f5f5',
     paddingBottom: 40,
   },
   header: {

@@ -1,0 +1,282 @@
+from flask import Flask, request, jsonify, render_template from shapely import wkt
+import pandas as pd import numpy as np import pickle import datetime
+
+app = Flask(	name	)
+
+
+# Load the trained model and dataset
+model = pickle.load(open('models/model.pkl', 'rb'))
+dataset = pd.read_csv('final_landslide_data_with_severity.csv')
+
+
+@app.route('/')
+
+
+def home():
+districts = dataset['District'].unique().tolist()
+return render_template('index.html', districts=districts)
+ 
+
+@app.route('/get_areas', methods=['POST']) def get_areas():
+"""Fetch unique areas based on the selected district.""" data = request.json
+district = data['district']
+areas = dataset[dataset['District'] == district]['Area'].unique().tolist() return jsonify({'areas': areas})
+
+@app.route('/fetch_details', methods=['POST']) def fetch_details():
+"""Fetch slope, NDVI, and rainfall based on district, area, and date.""" data = request.json
+district = data['district'] area = data['area']
+date = data['date']
+
+
+current_year = datetime.datetime.now().year year, month = map(int, date.split('-'))
+
+if	year	>	current_year	or	(year	==	current_year	and	month	> datetime.datetime.now().month):
+# Handle future dates: use averages
+filtered_data = dataset[dataset['District'] == district]
+ 
+
+slope_value = filtered_data['slope_value'].mean() ndvi_value = filtered_data['ndvi_value'].mean() rainfall = filtered_data['ANNUAL_x'].mean()
+else:
+# Filter dataset by district, area, and date filtered_data = dataset[
+(dataset['District'] == district) & (dataset['Area'] == area) & (dataset['Date'] == date)
+]
+if filtered_data.empty:
+return jsonify({'error': 'No data found for the selected district, area, and
+date.'})
+
+
+slope_value = filtered_data.iloc[0]['slope_value'] ndvi_value = filtered_data.iloc[0]['ndvi_value'] rainfall = filtered_data.iloc[0]['ANNUAL_x']
+
+return jsonify({'slope_value': slope_value, 'ndvi_value': ndvi_value, 'rainfall': rainfall})
+
+
+@app.route('/process', methods=['POST']) def process():
+"""Process all inputs and predict landslide."""
+ 
+
+try:
+data = request.json
+
+
+district = data.get('district', 'Unknown') area = data.get('area', '')
+slope_value = float(data.get('slope', 0)) ndvi_value = float(data.get('ndvi', 0)) rainfall = float(data.get('rainfall', 0))
+
+# Minimum rainfall threshold MIN_RAINFALL_THRESHOLD = 500
+
+# Calculate risk factors
+risk_factor_x = 1 if ndvi_value > 2200 else 0
+risk_factor_y = 1 if slope_value < 850 else 0
+risk_factor_z = 1 if rainfall < 2000 else 0
+
+
+# Prepare features for prediction
+features = np.array([[slope_value, ndvi_value, rainfall, risk_factor_x, risk_factor_y, risk_factor_z]])
+probability = model.predict_proba(features)[0][1]
+
+
+# Adjust logic based on rainfall
+ 
+
+if rainfall < MIN_RAINFALL_THRESHOLD: result = 'NO'
+else:
+result = 'YES' if probability >= 0.5 else 'NO'
+
+
+redirect_url = f"/map?district={district}&area={area}"
+
+
+return jsonify({ 'risk_factors': {
+'ndvi_risk': risk_factor_x, 'slope_risk': risk_factor_y, 'rainfall_risk': risk_factor_z
+},
+'probability': probability, 'prediction': result, 'redirect_url': redirect_url
+})
+except Exception as e:
+return jsonify({'error': f'Error: {str(e)}'}), 500
+
+
+@app.route('/map', methods=['GET']) def map_page():
+"""Render map page with Google Maps API centered on the area."""
+ 
+
+district = request.args.get('district') area = request.args.get('area')
+
+
+
+# Filter by both district and area to ensure specific data area_data = dataset[
+(dataset['District'] == district) & (dataset['Area'] == area)
+
+]
+
+
+if area_data.empty:
+return	render_template('map.html',	district=district,
+area=area,severity='Unknown', coordinates=[], color='gray')
+
+
+# Get severity for the specific area
+severity = area_data.iloc[0]['Landslide Severity']
+
+
+# Map severity to a color severity_colors = {
+'low': 'green',
+'medium': 'yellow',
+'high': 'red'
+ 
+
+}
+color = severity_colors.get(severity, 'gray')
+
+
+# Parse geometry data for the area
+geometry = wkt.loads(area_data.iloc[0]['wkt_geom'])
+
+
+if geometry.geom_type == 'Point':
+coordinates = [{'lat': geometry.y, 'lng': geometry.x}] elif geometry.geom_type == 'Polygon':
+coordinates	=	[{'lat':	point[1],	'lng':	point[0]}	for	point	in geometry.exterior.coords]
+else:
+coordinates = []
+
+
+# Render template with area-based severity and color return render_template(
+'map.html', district=district, area=area, severity=severity, coordinates=coordinates, color=color
+)
+ 
+
+
+
+if 		name	== '	main	': app.run(debug=True)
+from flask import Flask, request, jsonify, render_template from shapely import wkt
+import pandas as pd import numpy as np import pickle import datetime
+
+app = Flask(	name	)
+
+
+# Load the trained model and dataset
+model = pickle.load(open('models/model.pkl', 'rb'))
+dataset = pd.read_csv('final_landslide_data_with_severity.csv')
+
+
+@app.route('/') def home():
+districts = dataset['District'].unique().tolist()
+return render_template('index.html', districts=districts)
+
+
+@app.route('/get_areas', methods=['POST']) def get_areas():
+ 
+
+"""Fetch unique areas based on the selected district.""" data = request.json
+district = data['district']
+areas = dataset[dataset['District'] == district]['Area'].unique().tolist() return jsonify({'areas': areas})
+
+@app.route('/fetch_details', methods=['POST']) def fetch_details():
+"""Fetch slope, NDVI, and rainfall based on district, area, and date.""" data = request.json
+district = data['district'] area = data['area']
+date = data['date']
+
+
+current_year = datetime.datetime.now().year year, month = map(int, date.split('-'))
+
+if	year	>	current_year	or	(year	==	current_year	and	month	> datetime.datetime.now().month):
+# Handle future dates: use averages
+filtered_data = dataset[dataset['District'] == district] slope_value = filtered_data['slope_value'].mean() ndvi_value = filtered_data['ndvi_value'].mean()
+ 
+
+rainfall = filtered_data['ANNUAL_x'].mean() else:
+# Filter dataset by district, area, and date filtered_data = dataset[
+(dataset['District'] == district) & (dataset['Area'] == area) & (dataset['Date'] == date)
+]
+if filtered_data.empty:
+return jsonify({'error': 'No data found for the selected district, area, and
+date.'})
+
+
+slope_value = filtered_data.iloc[0]['slope_value'] ndvi_value = filtered_data.iloc[0]['ndvi_value'] rainfall = filtered_data.iloc[0]['ANNUAL_x']
+
+return jsonify({'slope_value': slope_value, 'ndvi_value': ndvi_value, 'rainfall': rainfall})
+
+
+@app.route('/process', methods=['POST']) def process():
+"""Process all inputs and predict landslide.""" try:
+data = request.json
+ 
+
+
+
+district = data.get('district', 'Unknown') area = data.get('area', '')
+slope_value = float(data.get('slope', 0)) ndvi_value = float(data.get('ndvi', 0)) rainfall = float(data.get('rainfall', 0))
+
+# Minimum rainfall threshold MIN_RAINFALL_THRESHOLD = 500
+
+# Calculate risk factors
+risk_factor_x = 1 if ndvi_value > 2200 else 0
+risk_factor_y = 1 if slope_value < 850 else 0
+risk_factor_z = 1 if rainfall < 2000 else 0
+
+
+# Prepare features for prediction
+features = np.array([[slope_value, ndvi_value, rainfall, risk_factor_x, risk_factor_y, risk_factor_z]])
+probability = model.predict_proba(features)[0][1]
+
+
+# Adjust logic based on rainfall
+if rainfall < MIN_RAINFALL_THRESHOLD: result = 'NO'
+ 
+
+else:
+result = 'YES' if probability >= 0.5 else 'NO'
+
+
+redirect_url = f"/map?district={district}&area={area}"
+
+
+return jsonify({ 'risk_factors': {
+'ndvi_risk': risk_factor_x, 'slope_risk': risk_factor_y, 'rainfall_risk': risk_factor_z
+},
+'probability': probability, 'prediction': result, 'redirect_url': redirect_url
+})
+except Exception as e:
+return jsonify({'error': f'Error: {str(e)}'}), 500
+
+
+@app.route('/map', methods=['GET']) def map_page():
+"""Render map page with Google Maps API centered on the area.""" district = request.args.get('district')
+area = request.args.get('area')
+ 
+
+
+
+
+
+# Filter by both district and area to ensure specific data area_data = dataset[
+(dataset['District'] == district) & (dataset['Area'] == area)
+]
+
+
+if area_data.empty:
+return	render_template('map.html',	district=district,
+area=area,severity='Unknown', coordinates=[], color='gray')
+
+
+# Get severity for the specific area
+severity = area_data.iloc[0]['Landslide Severity']
+
+
+# Map severity to a color severity_colors = {
+'low': 'green',
+'medium': 'yellow',
+'high': 'red'
+}
+color = severity_colors.get(severity, 'gray')
+ 
+
+# Parse geometry data for the area
+geometry = wkt.loads(area_data.iloc[0]['wkt_geom']) if geometry.geom_type == 'Point':
+coordinates = [{'lat': geometry.y, 'lng': geometry.x}] elif geometry.geom_type == 'Polygon':
+coordinates	=	[{'lat':	point[1],	'lng':	point[0]}	for	point	in geometry.exterior.coords]
+else:
+coordinates = []
+# Render template with area-based severity and color return render_template(
+'map.html', district=district, area=area, severity=severity, coordinates=coordinates, color=color
+)
+if 		name	== '	main	': app.run(debug=True)

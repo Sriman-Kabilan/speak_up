@@ -3,21 +3,44 @@
     "name": "SpeakUp",
     "slug": "speakup-native",
     "version": "1.0.0",
+    "sdkVersion": "51.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "assetBundlePatterns": [
       "**/*"
     ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.speakup.native",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "This app needs access to microphone to record your pronunciation for evaluation.",
+        "NSSpeechRecognitionUsageDescription": "This app uses speech recognition to help improve your pronunciation."
+      }
     },
     "android": {
       "package": "com.speakup.native",
       "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#2196F3"
+      },
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
+      ]
+    },
+    "web": {},
+    "extra": {
+      "eas": {
+        "projectId": "9a812fb8-0f65-4f37-bc91-e854fd86f337"
       }
     },
-    "web": {}
+    "plugins": [
+      [
+        "expo-av",
+        {
+          "microphonePermission": "Allow SpeakUp to access your microphone to record pronunciation."
+        }
+      ]
+    ]
   }
 }

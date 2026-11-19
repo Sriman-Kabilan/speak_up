@@ -50,6 +50,11 @@ const generateAudioFileName = (lessonId, text) => {
 
 export const seedFirestore = async () => {
   try {
+    // Check if Firebase is available
+    if (!db) {
+      return { success: false, error: 'Firebase not available - running in offline mode' };
+    }
+
     console.log('Starting database update...');
     
     // Remove duplicate Alphabet Sounds lessons

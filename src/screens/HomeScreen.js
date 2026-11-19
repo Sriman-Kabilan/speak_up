@@ -1,20 +1,8 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { seedFirestore } from '../services/seedData';
+import React from 'react';
+import { View, Text, StyleSheet } from 'react-native';
 import Button from '../components/Button';
 
 export default function HomeScreen({ navigation }) {
-  const [seeding, setSeeding] = useState(false);
-  const [seedMessage, setSeedMessage] = useState('');
-
-  const handleSeed = async () => {
-    setSeeding(true);
-    setSeedMessage('');
-    const result = await seedFirestore();
-    setSeeding(false);
-    setSeedMessage(result.success ? '✅ Database seeded!' : '❌ Error: ' + (result.error || 'Unknown error'));
-    setTimeout(() => setSeedMessage(''), 3000);
-  };
 
   return (
     <View style={styles.container}>
@@ -24,23 +12,11 @@ export default function HomeScreen({ navigation }) {
       <Text style={styles.title}>SpeakUp</Text>
       <Text style={styles.subtitle}>Master English Pronunciation</Text>
       
-      {seedMessage ? (
-        <Text style={styles.seedMessage}>{seedMessage}</Text>
-      ) : null}
-      
       <View style={styles.buttonContainer}>
         <Button
           title="Start Learning"
           onPress={() => navigation.navigate('Lessons')}
         />
-        
-        {seeding ? (
-          <ActivityIndicator size="small" color="#2196F3" style={styles.seedLoader} />
-        ) : (
-          <TouchableOpacity onPress={handleSeed} style={styles.seedButton}>
-            <Text style={styles.seedText}>Seed Database</Text>
-          </TouchableOpacity>
-        )}
       </View>
     </View>
   );
@@ -83,6 +59,11 @@ const styles = StyleSheet.create({
   seedText: {
     fontSize: 14,
     color: '#999',
+    textDecorationLine: 'underline',
+  },
+  upgradeText: {
+    fontSize: 14,
+    color: '#4caf50',
     textDecorationLine: 'underline',
   },
   seedLoader: {

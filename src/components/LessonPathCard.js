@@ -91,7 +91,6 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     width: 320,
     elevation: 6,
-    overflow: 'hidden',
   },
   cardLocked: {
     backgroundColor: '#f5f5f5',

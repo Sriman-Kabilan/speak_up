@@ -11,6 +11,19 @@ npm-debug.*
 web-build/
 dist/
 
+# Environment variables & secrets
+.env
+.env.local
+*serviceAccountKey.json
+serviceAccountKey.json
+
+# Python
+__pycache__/
+*.py[cod]
+backend/tts_cache/
+backend/__pycache__/
+backend/vosk-model.zip
+
 # macOS
 .DS_Store
 

@@ -1,19 +1,22 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, ScrollView } from 'react-native';
 import Button from '../components/Button';
 import { saveAttempt } from '../services/attemptService';
+import { getCurrentUser } from '../services/authService';
+import { markExerciseCompleted, isExerciseCompleted } from '../services/completedExerciseService';
 
 export default function ResultScreen({ route, navigation }) {
-  const { lesson, spokenText = 'Sample recording' } = route.params;
+  const { lesson, exercise, evaluationResult, isLastExercise = true, nextIndex, exercises, attemptCount = 0 } = route.params;
   const [saving, setSaving] = useState(false);
 
-  // Simulate accuracy calculation (replace with real AI scoring later)
-  const calculateAccuracy = () => {
-    return Math.floor(Math.random() * (95 - 70 + 1)) + 70; // Random 70-95%
-  };
-
-  const accuracy = calculateAccuracy();
-  const userId = 'user_001'; // Replace with actual user ID from auth
+  // NO DUMMY SCORING - Use real evaluation result only
+  const accuracy = evaluationResult?.score ?? 0;
+  
+  if (!evaluationResult) {
+    console.error('❌ No evaluation result provided to ResultScreen');
+  }
+  const user = getCurrentUser();
+  const userId = user ? user.uid : 'user_001';
 
   const getFeedback = () => {
     if (accuracy >= 90) return '🎉 Excellent! Perfect pronunciation!';
@@ -25,28 +28,111 @@ export default function ResultScreen({ route, navigation }) {
   const handleSaveAttempt = async () => {
     setSaving(true);
     try {
-      await saveAttempt({
-        user_id: userId,
-        lesson_id: lesson.lesson_id,
-        spoken_text: spokenText,
-        accuracy: accuracy
-      });
-      navigation.navigate('Progress');
+      // Check if already completed
+      const alreadyCompleted = await isExerciseCompleted(userId, lesson.lesson_id, exercise?.id || 'unknown');
+      
+      if (!alreadyCompleted) {
+        // Save attempt with research-grade evaluation data
+        const phonemeErrorMap = {};
+        if (evaluationResult?.incorrectPhonemes) {
+          evaluationResult.incorrectPhonemes.forEach(p => {
+            phonemeErrorMap[p.phoneme] = {
+              score: p.score,
+              severity: p.severity,
+              distance: p.distance
+            };
+          });
+        }
+
+        await saveAttempt({
+          user_id: userId,
+          lesson_id: lesson.lesson_id,
+          exercise_id: exercise?.id || 'unknown',
+          score: accuracy,
+          total_dtw_distance: evaluationResult?.distance || 0,
+          normalized_dtw_distance: evaluationResult?.normalizedDtwDistance || 0,
+          phoneme_error_map: phonemeErrorMap,
+          pitch_deviation_score: evaluationResult?.pitchDeviationScore || 0,
+          confidence_level: evaluationResult?.confidenceLevel || 'medium',
+          retry_count: attemptCount || 0,
+          audio_quality: evaluationResult?.audioQuality || {},
+          incorrect_phonemes: evaluationResult?.incorrectPhonemes || [],
+          algorithm_version: evaluationResult?.algorithmVersion || '2.0-research-grade'
+        });
+        
+        // Mark as completed
+        await markExerciseCompleted(userId, lesson.lesson_id, exercise?.id || 'unknown');
+      }
+      
+      if (isLastExercise) {
+        navigation.navigate('Progress');
+      } else {
+        navigation.replace('PracticeExercise', { 
+          lesson, 
+          exercises, 
+          startIndex: nextIndex 
+        });
+      }
     } catch (error) {
       console.error('Error saving attempt:', error);
       setSaving(false);
     }
   };
 
+  const handleTryAgain = () => {
+    navigation.replace('PracticeExercise', { 
+      lesson, 
+      exercises, 
+      startIndex: isLastExercise ? exercises.length - 1 : nextIndex - 1
+    });
+  };
+
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
       <View style={styles.content}>
         <View style={styles.scoreCircle}>
           <Text style={styles.accuracy}>{accuracy}%</Text>
         </View>
         
-        <Text style={styles.title}>{lesson.title}</Text>
+        <Text style={styles.title}>{exercise?.text || lesson.title}</Text>
         <Text style={styles.feedback}>{getFeedback()}</Text>
+        
+        {/* Phoneme Breakdown */}
+        {evaluationResult?.phoneme_segments && evaluationResult.phoneme_segments.length > 0 && (
+          <View style={styles.phonemeCard}>
+            <Text style={styles.phonemeTitle}>📊 Phoneme Analysis</Text>
+            <Text style={styles.phonemeSubtitle}>Individual sound scores:</Text>
+            {evaluationResult.phoneme_segments.map((phoneme, index) => (
+              <View key={index} style={styles.phonemeRow}>
+                <Text style={styles.phonemeLabel}>{phoneme.readable || phoneme.phoneme}</Text>
+                <View style={styles.phonemeScoreContainer}>
+                  <View style={[
+                    styles.phonemeBar,
+                    { width: `${phoneme.score}%` },
+                    phoneme.score >= 70 ? styles.phonemeGood : 
+                    phoneme.score >= 50 ? styles.phonemeWarning : 
+                    styles.phonemeBad
+                  ]} />
+                  <Text style={styles.phonemeScore}>{phoneme.score}%</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
+        
+        {/* Incorrect Phonemes Highlight */}
+        {evaluationResult?.incorrectPhonemes && evaluationResult.incorrectPhonemes.length > 0 && (
+          <View style={styles.incorrectCard}>
+            <Text style={styles.incorrectTitle}>⚠️ Needs Improvement</Text>
+            {evaluationResult.incorrectPhonemes.map((phoneme, index) => (
+              <View key={index} style={styles.incorrectRow}>
+                <Text style={styles.incorrectPhoneme}>{phoneme.readableLabel || phoneme.phoneme}</Text>
+                <Text style={styles.incorrectScore}>Score: {phoneme.score}%</Text>
+              </View>
+            ))}
+            <Text style={styles.incorrectHint}>{evaluationResult.feedbackText}</Text>
+          </View>
+        )}
         
         <View style={styles.detailsCard}>
           <Text style={styles.detailLabel}>Lesson Category</Text>
@@ -60,20 +146,20 @@ export default function ResultScreen({ route, navigation }) {
         ) : (
           <View style={styles.buttonContainer}>
             <Button
-              title="View My Progress"
+              title={isLastExercise ? "View My Progress" : "Next Exercise"}
               onPress={handleSaveAttempt}
               style={styles.button}
             />
             <Button
               title="Try Again"
-              onPress={() => navigation.goBack()}
+              onPress={handleTryAgain}
               variant="secondary"
               style={styles.button}
             />
           </View>
         )}
       </View>
-    </View>
+    </ScrollView>
   );
 }
 
@@ -82,8 +168,11 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f5f5f5',
   },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 40,
+  },
   content: {
-    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 20,
@@ -144,5 +233,94 @@ const styles = StyleSheet.create({
   },
   button: {
     width: '80%',
+  },
+  phonemeCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 20,
+    width: '100%',
+    marginBottom: 20,
+    elevation: 3,
+  },
+  phonemeTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 5,
+  },
+  phonemeSubtitle: {
+    fontSize: 12,
+    color: '#999',
+    marginBottom: 15,
+  },
+  phonemeRow: {
+    marginBottom: 12,
+  },
+  phonemeLabel: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 5,
+    fontWeight: '600',
+  },
+  phonemeScoreContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  phonemeBar: {
+    height: 20,
+    borderRadius: 10,
+    marginRight: 10,
+  },
+  phonemeGood: {
+    backgroundColor: '#4caf50',
+  },
+  phonemeWarning: {
+    backgroundColor: '#ff9800',
+  },
+  phonemeBad: {
+    backgroundColor: '#f44336',
+  },
+  phonemeScore: {
+    fontSize: 12,
+    color: '#666',
+    fontWeight: 'bold',
+  },
+  incorrectCard: {
+    backgroundColor: '#fff3e0',
+    borderRadius: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: '#ff9800',
+    padding: 20,
+    width: '100%',
+    marginBottom: 20,
+  },
+  incorrectTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#e65100',
+    marginBottom: 10,
+  },
+  incorrectRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+    paddingVertical: 5,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ffe0b2',
+  },
+  incorrectPhoneme: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#d84315',
+  },
+  incorrectScore: {
+    fontSize: 14,
+    color: '#666',
+  },
+  incorrectHint: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 10,
+    fontStyle: 'italic',
   },
 });

@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, ScrollView, Dimensions } from 'react-native';
 import { getExercisesByLesson } from '../services/exerciseService';
+import { getCompletedExercises } from '../services/completedExerciseService';
+import { getCurrentUser } from '../services/authService';
 
 const { width } = Dimensions.get('window');
 const numColumns = width > 600 ? 4 : 3;
@@ -8,6 +10,7 @@ const numColumns = width > 600 ? 4 : 3;
 export default function ExerciseListScreen({ route, navigation }) {
   const { lesson } = route.params;
   const [exercises, setExercises] = useState([]);
+  const [completedExerciseIds, setCompletedExerciseIds] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -18,6 +21,12 @@ export default function ExerciseListScreen({ route, navigation }) {
     try {
       const data = await getExercisesByLesson(lesson.lesson_id);
       setExercises(data);
+      
+      const user = getCurrentUser();
+      const userId = user ? user.uid : 'user_001';
+      const completed = await getCompletedExercises(userId, lesson.lesson_id);
+      setCompletedExerciseIds(completed);
+      
       setLoading(false);
     } catch (error) {
       console.error('Error loading exercises:', error);
@@ -40,14 +49,24 @@ export default function ExerciseListScreen({ route, navigation }) {
         <Text style={styles.subtitle}>{exercises.length} exercises</Text>
       </View>
 
-      <ScrollView contentContainerStyle={styles.grid}>
-        {exercises.map((exercise, index) => (
+      <ScrollView 
+        contentContainerStyle={styles.grid}
+        showsVerticalScrollIndicator={true}
+      >
+        {exercises.map((exercise, index) => {
+          const isCompleted = completedExerciseIds.includes(exercise.id);
+          return (
           <TouchableOpacity
             key={exercise.id}
-            style={[styles.exerciseCard, { width: `${100 / numColumns - 4}%` }]}
+            style={[styles.exerciseCard, { width: `${100 / numColumns - 4}%` }, isCompleted && styles.exerciseCardCompleted]}
             onPress={() => navigation.navigate('PracticeExercise', { lesson, exercises, startIndex: index })}
             activeOpacity={0.8}
           >
+            {isCompleted && (
+              <View style={styles.completedBadge}>
+                <Text style={styles.completedCheck}>✓</Text>
+              </View>
+            )}
             <View style={styles.cardTop}>
               <Text style={styles.exerciseNumber}>#{index + 1}</Text>
             </View>
@@ -55,12 +74,12 @@ export default function ExerciseListScreen({ route, navigation }) {
               <Text style={styles.exerciseText} numberOfLines={2}>{exercise.text}</Text>
             </View>
             <View style={styles.cardBottom}>
-              <View style={styles.playButton}>
-                <Text style={styles.playIcon}>▶</Text>
+              <View style={[styles.playButton, isCompleted && styles.playButtonCompleted]}>
+                <Text style={styles.playIcon}>{isCompleted ? '✓' : '▶'}</Text>
               </View>
             </View>
           </TouchableOpacity>
-        ))}
+        )})}
       </ScrollView>
     </View>
   );
@@ -103,6 +122,28 @@ const styles = StyleSheet.create({
     margin: 6,
     elevation: 3,
     overflow: 'hidden',
+    position: 'relative',
+  },
+  exerciseCardCompleted: {
+    borderWidth: 2,
+    borderColor: '#4caf50',
+  },
+  completedBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#4caf50',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1,
+  },
+  completedCheck: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
   },
   cardTop: {
     padding: 8,
@@ -136,6 +177,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#2196F3',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  playButtonCompleted: {
+    backgroundColor: '#4caf50',
   },
   playIcon: {
     fontSize: 12,
